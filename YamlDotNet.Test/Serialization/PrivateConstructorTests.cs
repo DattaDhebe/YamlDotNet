@@ -44,11 +44,21 @@ namespace YamlDotNet.Test.Serialization
                 .WithTagMapping(new TagName("inner"), typeof(Inner))
                 .Build();
             var actual = serializer.Serialize(artifact).NormalizeNewLines().Trim(new char[] { '\r', '\n' });
-            var expected = @"outer
+            var expected = @"!<outer>
 Value: test
-InnerValue: inner
+InnerValue: !<inner>
   Value: inner test".NormalizeNewLines();
             Assert.Equal(expected, actual);
+
+            var deserializer = new DeserializerBuilder()
+                .EnablePrivateConstructors()
+                .WithTagMapping(new TagName("outer"), typeof(Outer))
+                .WithTagMapping(new TagName("inner"), typeof(Inner))
+                .Build();
+            var roundtripped = deserializer.Deserialize<Outer>(actual);
+
+            Assert.Equal(artifact.Value, roundtripped.Value);
+            Assert.Equal(artifact.InnerValue.Value, roundtripped.InnerValue.Value);
         }
 
         [Fact]
