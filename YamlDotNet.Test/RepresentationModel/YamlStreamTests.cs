@@ -165,6 +165,92 @@ stringWriter.ToString().NormalizeNewLines().TrimNewLines());
             Assert.Equal(expected, actual);
         }
 
+        [Theory]
+        [InlineData("!custom\nkey: value")]
+        [InlineData("!custom {key: value}")]
+        [InlineData("!custom%20tag {key: value}")]
+        [InlineData("!<tag:example.com,2026:custom>\nkey: value")]
+        [InlineData("!<tag:example.com,2026:custom> {key: value}")]
+        [InlineData("outer: !<tag:example.com,2026:custom>\n  key: value")]
+        [InlineData("outer: !<tag:example.com,2026:custom> {key: value}")]
+        [InlineData("!!map\nkey: value")]
+        [InlineData("!!map {key: value}")]
+        [InlineData("!custom\n- value")]
+        [InlineData("!custom [value]")]
+        [InlineData("!<tag:example.com,2026:custom>\n- value")]
+        [InlineData("!<tag:example.com,2026:custom> [value]")]
+        [InlineData("!!seq\n- value")]
+        [InlineData("!!seq [value]")]
+        [InlineData("key: value")]
+        [InlineData("{key: value}")]
+        [InlineData("- value")]
+        [InlineData("[value]")]
+        public void CollectionTagsRoundtrip(string yaml)
+        {
+            var original = new YamlStream();
+            original.Load(new StringReader(yaml));
+
+            var writer = new StringWriter();
+            original.Save(writer, assignAnchors: false);
+
+            var final = new YamlStream();
+            final.Load(new StringReader(writer.ToString()));
+
+            Assert.Equal(original.Documents[0].RootNode.Tag, final.Documents[0].RootNode.Tag);
+            Assert.Equal(original.Documents[0].RootNode, final.Documents[0].RootNode);
+        }
+
+        [Theory]
+        [InlineData(MappingStyle.Block, "!custom")]
+        [InlineData(MappingStyle.Flow, "!custom")]
+        [InlineData(MappingStyle.Block, "tag:example.com,2026:custom")]
+        [InlineData(MappingStyle.Flow, "tag:example.com,2026:custom")]
+        [InlineData(MappingStyle.Block, "tag:yaml.org,2002:map")]
+        [InlineData(MappingStyle.Flow, "tag:yaml.org,2002:map")]
+        public void ProgrammaticMappingTagsAreEmitted(MappingStyle style, string tag)
+        {
+            var mapping = new YamlMappingNode { { "key", "value" } };
+            mapping.Style = style;
+            mapping.Tag = tag;
+            var original = new YamlStream(new YamlDocument(mapping));
+
+            var writer = new StringWriter();
+            original.Save(writer, assignAnchors: false);
+
+            var final = new YamlStream();
+            final.Load(new StringReader(writer.ToString()));
+            var finalMapping = Assert.IsType<YamlMappingNode>(final.Documents[0].RootNode);
+
+            Assert.Equal(mapping.Tag, finalMapping.Tag);
+            Assert.Equal(style, finalMapping.Style);
+            Assert.Equal(mapping, finalMapping);
+        }
+
+        [Theory]
+        [InlineData("first: &shared !custom\n  key: value\nsecond: *shared", "!custom")]
+        [InlineData("first: &shared !custom {key: value}\nsecond: *shared", "!custom")]
+        [InlineData("first: &shared !custom\n- value\nsecond: *shared", "!custom")]
+        [InlineData("first: &shared !custom [value]\nsecond: *shared", "!custom")]
+        [InlineData("first: &shared !<tag:example.com,2026:custom> {key: value}\nsecond: *shared", "tag:example.com,2026:custom")]
+        [InlineData("first: &shared !<tag:example.com,2026:custom> [value]\nsecond: *shared", "tag:example.com,2026:custom")]
+        public void AnchoredCollectionTagsRoundtrip(string yaml, string tag)
+        {
+            var original = new YamlStream();
+            original.Load(new StringReader(yaml));
+
+            var writer = new StringWriter();
+            original.Save(writer, assignAnchors: false);
+
+            var final = new YamlStream();
+            final.Load(new StringReader(writer.ToString()));
+            var mapping = Assert.IsType<YamlMappingNode>(final.Documents[0].RootNode);
+
+            Assert.Equal(new TagName(tag), mapping["first"].Tag);
+            Assert.Equal(new AnchorName("shared"), mapping["first"].Anchor);
+            Assert.Same(mapping["first"], mapping["second"]);
+            Assert.Equal(original.Documents[0].RootNode, mapping);
+        }
+
         [Fact]
         public void RoundtripExample1()
         {
