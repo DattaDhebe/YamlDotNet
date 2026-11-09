@@ -548,7 +548,7 @@ namespace YamlDotNet.Core
 
         private void AnalyzeTag(TagName tag)
         {
-            tagData.Handle = tag.Value;
+            tagData.Suffix = tag.Value;
             foreach (var tagDirective in tagDirectives)
             {
                 if (tag.Value.StartsWith(tagDirective.Prefix, StringComparison.Ordinal))
