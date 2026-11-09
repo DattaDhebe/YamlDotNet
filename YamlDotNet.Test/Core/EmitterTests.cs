@@ -64,6 +64,68 @@ namespace YamlDotNet.Test.Core
             );
         }
 
+        [Theory]
+        [InlineData("!<tag:example.com,2026:custom> value")]
+        [InlineData("!<tag:example.com,2026:custom>\nkey: value")]
+        [InlineData("!<tag:example.com,2026:custom> {key: value}")]
+        [InlineData("!<tag:example.com,2026:custom>\n- value")]
+        [InlineData("!<tag:example.com,2026:custom> [value]")]
+        [InlineData("outer: !<tag:example.com,2026:custom> {key: value}")]
+        [InlineData("!<tag:example.com,2026:custom> key: value")]
+        [InlineData("%TAG !other! tag:other.example,2026:\n--- !<tag:example.com,2026:custom> value")]
+        public void GlobalTagsWithoutMatchingDirectiveRoundtrip(string yaml)
+        {
+            var originalEvents = ParsingEventsOf(yaml);
+            var emittedText = EmittedTextFrom(originalEvents);
+
+            emittedText.Should().Contain("!<tag:example.com,2026:custom>");
+            ParsingEventsOf(emittedText).Should().BeEquivalentTo(originalEvents, opt => opt
+                .Excluding(@event => @event.Start)
+                .Excluding(@event => @event.End)
+                .Excluding(@event => ((DocumentEnd)@event).IsImplicit)
+            );
+        }
+
+        [Theory]
+        [InlineData("!custom value", "!custom")]
+        [InlineData("!!str value", "!!str")]
+        [InlineData("!custom%20tag value", "!custom%20tag")]
+        [InlineData("%TAG !e! tag:example.com,2026:\n--- !e!custom value", "!e!custom")]
+        public void TagsWithMatchingDirectiveKeepTheirHandle(string yaml, string handle)
+        {
+            var originalEvents = ParsingEventsOf(yaml);
+            var emittedText = EmittedTextFrom(originalEvents);
+
+            emittedText.Should().Contain(handle + " value");
+            ParsingEventsOf(emittedText).Should().BeEquivalentTo(originalEvents, opt => opt
+                .Excluding(@event => @event.Start)
+                .Excluding(@event => @event.End)
+                .Excluding(@event => ((DocumentEnd)@event).IsImplicit)
+            );
+        }
+
+        [Fact]
+        public void NonSpecificScalarTagRemainsImplicit()
+        {
+            var emittedText = EmittedTextFrom(ParsingEventsOf("! value"));
+
+            emittedText.Should().Be("value" + Environment.NewLine);
+        }
+
+        [Fact]
+        public void VerbatimTagContentsAreEscaped()
+        {
+            var originalEvents = ParsingEventsOf("!<tag:example.com,2026:caf%C3%A9> value");
+            var emittedText = EmittedTextFrom(originalEvents);
+
+            emittedText.Should().Contain("!<tag:example.com,2026:caf%C3%A9> value");
+            ParsingEventsOf(emittedText).Should().BeEquivalentTo(originalEvents, opt => opt
+                .Excluding(@event => @event.Start)
+                .Excluding(@event => @event.End)
+                .Excluding(@event => ((DocumentEnd)@event).IsImplicit)
+            );
+        }
+
         private IList<ParsingEvent> ParsingEventsOf(string text)
         {
             var parser = new Parser(new StringReader(text));
